@@ -4,10 +4,12 @@ import com.hipka.app.data.local.entity.SearchHistoryEntity
 import com.hipka.app.domain.model.Song
 
 enum class SearchFilter {
-    ALL, SONG, ARTIST
+    ALL, SONG, ARTIST, DOWNLOADABLE
 }
 
 data class SearchUiState(
+    val artistsError: Boolean = false,
+    val artists: List<com.hipka.app.domain.model.Artist> = emptyList(),
     val searchQuery: String = "",
     val rawSearchResults: List<Song> = emptyList(), // Keeps the unfiltered network response
     val searchResults: List<Song> = emptyList(),    // The filtered list sent to UI

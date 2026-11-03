@@ -1,5 +1,6 @@
 package com.hipka.app.domain.model
 
+@kotlinx.serialization.Serializable
 data class Song(
     val id: String,
     val title: String,
@@ -11,5 +12,9 @@ data class Song(
     val playCount: Int = 0,         // Added for "Popular" sorting
     val releaseDate: String = "",    // Added for "New Releases" sorting (e.g., "2026-07-15")
     val isDownloaded: Boolean = false,
+    val artistId: String = "",
+    val genre: String = "",
+    val tags: String = "",
+    val downloadable: Boolean = false,
     val localFilePath: String? = null // to do
 )

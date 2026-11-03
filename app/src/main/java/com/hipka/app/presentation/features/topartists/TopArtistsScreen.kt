@@ -63,11 +63,13 @@ fun TopArtistsScreen(
                     )
                 }
                 uiState.errorMessage != null && uiState.artists.isEmpty() -> {
+                    Column(Modifier.align(Alignment.Center)) {
                     Text(
                         text = uiState.errorMessage ?: "",
-                        modifier = Modifier.align(Alignment.Center),
                         color = MaterialTheme.colorScheme.error
                     )
+                    TextButton(onClick = { viewModel.onIntent(TopArtistsIntent.LoadTopArtists) }) { Text(stringResource(R.string.search_retry)) }
+                    }
                 }
                 else -> {
                     LazyColumn(

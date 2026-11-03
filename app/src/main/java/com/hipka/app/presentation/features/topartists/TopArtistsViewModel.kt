@@ -9,6 +9,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.catch
 import javax.inject.Inject
 
 @HiltViewModel
@@ -32,7 +33,10 @@ class TopArtistsViewModel @Inject constructor(
     private fun fetchTopArtists() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true) }
-            songRepository.getTopArtists().collect { artistList ->
+            songRepository.getTopArtists().catch { error ->
+                if (error is kotlinx.coroutines.CancellationException) throw error
+                _uiState.update { it.copy(isLoading = false, errorMessage = "Could not load artists. Please retry.") }
+            }.collect { artistList ->
                 _uiState.update {
                     it.copy(
                         artists = artistList,

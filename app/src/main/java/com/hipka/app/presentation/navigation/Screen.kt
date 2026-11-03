@@ -4,6 +4,8 @@ sealed class Screen(val route: String) {
 
     data object Auth : Screen("auth")
     // مقصدهای منوی پایین صفحه (Bottom Navigation)
+    data object Library : Screen("library")
+    data object Vibes : Screen("vibes")
     data object Home : Screen("home")
     data object Search : Screen("search")
     data object Downloads : Screen("downloads")
@@ -24,17 +26,17 @@ sealed class Screen(val route: String) {
     }
 
     companion object {
-        val bottomNavItems: List<Screen> = listOf(Home, Search, Downloads, Playlists, Profile)
+        val bottomNavItems: List<Screen> = listOf(Home, Search, Library, Playlists, ChatList)
     }
 
     object SeeAll : Screen("see_all/{section}") {
         fun createRoute(section: String) = "see_all/${android.net.Uri.encode(section)}"
     }
     data object TopArtists : Screen("top_artists")
-    object ArtistDetail : Screen("artist_detail/{artistName}/{imageUrl}") {
-        fun createRoute(artistName: String, imageUrl: String): String {
+    object ArtistDetail : Screen("artist_detail/{artistName}/{imageUrl}?artistId={artistId}") {
+        fun createRoute(artistName: String, imageUrl: String, artistId: String = ""): String {
             val encodedUrl = android.net.Uri.encode(imageUrl.ifBlank { " " })
-            return "artist_detail/${android.net.Uri.encode(artistName)}/$encodedUrl"
+            return "artist_detail/${android.net.Uri.encode(artistName)}/$encodedUrl?artistId=${android.net.Uri.encode(artistId)}"
         }
     }
 }

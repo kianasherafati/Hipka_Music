@@ -17,10 +17,11 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideSupabaseClient(): SupabaseClient = createSupabaseClient(
+    fun provideSupabaseClient(sessionStorage: com.hipka.app.data.local.datastore.EncryptedAuthStorage): SupabaseClient = createSupabaseClient(
         supabaseUrl = BuildConfig.SUPABASE_URL,
         supabaseKey = BuildConfig.SUPABASE_KEY
     ) {
+        install(io.github.jan.supabase.gotrue.Auth) { sessionManager = sessionStorage }
         install(Realtime)
     }
 }

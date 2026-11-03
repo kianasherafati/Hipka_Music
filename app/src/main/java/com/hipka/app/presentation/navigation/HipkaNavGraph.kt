@@ -13,6 +13,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -61,12 +63,23 @@ fun HipkaNavGraph(
     onMainIntent: (MainIntent) -> Unit,
     navController: NavHostController = rememberNavController()
 ) {
+    var priorAccount by remember { mutableStateOf(mainUiState.userId) }
+    LaunchedEffect(mainUiState.userId) {
+        if (priorAccount != null && priorAccount != mainUiState.userId) {
+            navController.navigate(Screen.Home.route) { popUpTo(0) { inclusive = true }; launchSingleTop = true }
+        }
+        priorAccount = mainUiState.userId
+    }
     val playerViewModel: PlayerViewModel = hiltViewModel()
     val playerUiState by playerViewModel.uiState.collectAsStateWithLifecycle()
     val songInteractionViewModel: SongInteractionViewModel = hiltViewModel()
     val likedSongIds by songInteractionViewModel.likedSongIds.collectAsStateWithLifecycle()
     val downloadedSongIds by songInteractionViewModel.downloadedSongIds.collectAsStateWithLifecycle()
 
+    var shareSong by remember { mutableStateOf<Song?>(null) }
+    shareSong?.let { com.hipka.app.presentation.features.profile.ShareSongDialog(it, { shareSong = null }) }
+    var playlistSong by remember { mutableStateOf<Song?>(null) }
+    playlistSong?.let { song -> com.hipka.app.presentation.features.playlists.AddToPlaylistDialog(song, { playlistSong = null }) }
     val snackbarHostState = remember { SnackbarHostState() }
     LaunchedEffect(playerViewModel) {
         playerViewModel.playbackErrors.collect { message ->
@@ -97,6 +110,13 @@ fun HipkaNavGraph(
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = navBackStackEntry?.destination?.route
 
+    androidx.compose.runtime.CompositionLocalProvider(com.hipka.app.presentation.common.LocalTrackActions provides
+        com.hipka.app.presentation.common.TrackActions(
+            playlist = { playlistSong = it },
+            play = playQueueAndTrack,
+            chat = { if (mainUiState.isLoggedIn) shareSong = it else navController.navigate(Screen.Auth.route) },
+            artist = { navController.navigate(Screen.ArtistDetail.createRoute(it.artistName, "", it.artistId)) }
+        )) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
@@ -139,9 +159,11 @@ fun HipkaNavGraph(
                 .consumeWindowInsets(innerPadding)
         ) {
             // --- صفحه ورود / ثبت نام ---
+            composable("password_reset") { com.hipka.app.presentation.features.auth.PasswordResetScreen() }
             composable(Screen.Auth.route) {
                 AuthScreen(
                     onMainIntent = onMainIntent,
+                    onResetPassword = { navController.navigate("password_reset") },
                     onAuthSuccess = {
                         navController.navigate(Screen.Home.route) {
                             popUpTo(Screen.Auth.route) { inclusive = true }
@@ -188,6 +210,8 @@ fun HipkaNavGraph(
                         }
                     },
                     onNavigateToSettings = { navController.navigate(Screen.Settings.route) },
+                    onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
+                    onVibes = { navController.navigate(Screen.Vibes.route) },
                     onGoToDownloads = {
                         navController.navigate(Screen.Downloads.route) {
                             popUpTo(navController.graph.startDestinationId) { saveState = true }
@@ -203,7 +227,7 @@ fun HipkaNavGraph(
                 TopArtistsScreen(
                     onBackClick = { navController.popBackStack() },
                     onArtistClick = { artist ->
-                        navController.navigate(Screen.ArtistDetail.createRoute(artist.name, artist.imageUrl))
+                        navController.navigate(Screen.ArtistDetail.createRoute(artist.name, artist.imageUrl, artist.id))
                     }
                 )
             }
@@ -212,7 +236,8 @@ fun HipkaNavGraph(
                 route = Screen.ArtistDetail.route,
                 arguments = listOf(
                     navArgument("artistName") { type = NavType.StringType },
-                    navArgument("imageUrl") { type = NavType.StringType }
+                    navArgument("imageUrl") { type = NavType.StringType },
+                    navArgument("artistId") { type = NavType.StringType; defaultValue = "" }
                 )
             ) { backStackEntry ->
                 val artistName = backStackEntry.arguments?.getString("artistName") ?: ""
@@ -220,6 +245,7 @@ fun HipkaNavGraph(
                 val imageUrl = rawImageUrl.trim()
 
                 ArtistDetailScreen(
+                    artistId = backStackEntry.arguments?.getString("artistId").orEmpty(),
                     artistName = artistName,
                     imageUrl = imageUrl,
                     likedSongIds = likedSongIds,
@@ -248,10 +274,11 @@ fun HipkaNavGraph(
 
             composable(Screen.Search.route) {
                 SearchScreen(
+                    onArtist = { navController.navigate(Screen.ArtistDetail.createRoute(it.name, it.imageUrl, it.id)) },
                     likedSongIds = likedSongIds,
                     onSongClick = playQueueAndTrack,
                     onLikeClick = { song -> songInteractionViewModel.toggleLike(song) },
-                    onNavigateToDiscoverUsers = { navController.navigate(if (mainUiState.isLoggedIn) "followed_users/discover" else Screen.Profile.route) }
+                    onNavigateToDiscoverUsers = { navController.navigate(if (mainUiState.isLoggedIn) Screen.ChatList.route else Screen.Profile.route) }
                 )
             }
 
@@ -261,7 +288,7 @@ fun HipkaNavGraph(
                 )
             }
 
-            composable(Screen.Playlists.route) {
+            composable(Screen.Library.route) {
                 com.hipka.app.presentation.features.profile.LocalLibraryScreen(
                     onLikes = { navController.navigate(Screen.LikedSongs.route) },
                     onRecent = { navController.navigate(Screen.RecentlyPlayed.route) },
@@ -270,20 +297,17 @@ fun HipkaNavGraph(
                 )
             }
 
+            composable(Screen.Playlists.route) {
+                com.hipka.app.presentation.features.playlists.LocalPlaylistsScreen(playQueueAndTrack, { navController.navigate(Screen.Vibes.route) })
+            }
+            composable(Screen.Vibes.route) { com.hipka.app.presentation.features.playlists.VibesScreen(playQueueAndTrack) }
             composable(Screen.Profile.route) {
                 if (!mainUiState.isLoggedIn) {
-                    com.hipka.app.presentation.features.profile.LocalLibraryScreen(
-                        onLikes = { navController.navigate(Screen.LikedSongs.route) },
-                        onRecent = { navController.navigate(Screen.RecentlyPlayed.route) },
-                        onDownloads = { navController.navigate(Screen.Downloads.route) },
-                        onSettings = { navController.navigate(Screen.Settings.route) },
-                        onLegacySignIn = if (com.hipka.app.BuildConfig.LEGACY_DEMO_AUTH) {
-                            { navController.navigate(Screen.Auth.route) }
-                        } else null
-                    )
-                } else ProfileScreen(
-                    onNavigateToFollowedUsers = { type -> navController.navigate("followed_users/$type") },
-                    onNavigateToSettings = { navController.navigate(Screen.Settings.route) }
+                    GuestAccountScreen(onSignIn = { navController.navigate(Screen.Auth.route) }, onSettings = { navController.navigate(Screen.Settings.route) })
+                } else com.hipka.app.presentation.features.profile.AccountScreen(
+                    onUser = { navController.navigate("account/$it") },
+                    onMessage = { navController.navigate(Screen.ChatConversation.createRoute(it)) },
+                    onSettings = { navController.navigate(Screen.Settings.route) }
                 )
             }
 
@@ -294,6 +318,7 @@ fun HipkaNavGraph(
                     uiState = playerUiState,
                     onIntent = { playerViewModel.onIntent(it) },
                     onBackClick = { navController.popBackStack() },
+                    onAddToPlaylist = { playlistSong = playerUiState.currentSong },
                     isDownloaded = currentSongId != null && downloadedSongIds.contains(currentSongId),
                     onDownloadClick = {
                         playerUiState.currentSong?.let { songInteractionViewModel.downloadSong(it) }
@@ -353,13 +378,27 @@ fun HipkaNavGraph(
                 )
             }
 
-            composable(Screen.ChatList.route) { PlaceholderScreen("Chats") }
+            composable("account/{userId}", arguments = listOf(navArgument("userId") { type = NavType.StringType })) { entry ->
+                if (mainUiState.isLoggedIn) com.hipka.app.presentation.features.profile.AccountScreen(
+                    userId = entry.arguments?.getString("userId"), onUser = { navController.navigate("account/$it") },
+                    onMessage = { navController.navigate(Screen.ChatConversation.createRoute(it)) },
+                    onSettings = { navController.navigate(Screen.Settings.route) })
+                else GuestAccountScreen({ navController.navigate(Screen.Auth.route) }, { navController.navigate(Screen.Settings.route) })
+            }
+            composable(Screen.ChatList.route) {
+                if (mainUiState.isLoggedIn) com.hipka.app.presentation.features.profile.ConversationsScreen(
+                    onUser = { navController.navigate("account/$it") },
+                    onMessage = { navController.navigate(Screen.ChatConversation.createRoute(it)) })
+                else GuestAccountScreen(onSignIn = { navController.navigate(Screen.Auth.route) }, onSettings = { navController.navigate(Screen.Settings.route) })
+            }
 
             composable(
                 route = Screen.ChatConversation.route,
                 arguments = listOf(navArgument(Screen.ChatConversation.ARG_PEER_USER_ID) { type = NavType.StringType })
             ) {
-                ChatScreen(
+                if (!mainUiState.isLoggedIn) GuestAccountScreen({ navController.navigate(Screen.Auth.route) }, { navController.navigate(Screen.Settings.route) })
+                else ChatScreen(
+                    viewModel = hiltViewModel(key = "chat-${mainUiState.userId}"),
                     onBackClick = { navController.popBackStack() },
                     onPlaySong = { song ->
                         songInteractionViewModel.addToRecentlyPlayed(song)
@@ -368,6 +407,7 @@ fun HipkaNavGraph(
                 )
             }
         }
+    }
     }
 }
 
@@ -396,5 +436,15 @@ private fun PlaceholderScreen(title: String) {
             text = "$translatedTitle — $comingSoonText",
             style = MaterialTheme.typography.titleMedium
         )
+    }
+}
+
+@Composable
+private fun GuestAccountScreen(onSignIn: () -> Unit, onSettings: () -> Unit) {
+    Column(Modifier.fillMaxSize().padding(HipkaTheme.dimens.spaceL), verticalArrangement = Arrangement.spacedBy(HipkaTheme.dimens.spaceM)) {
+        Text(stringResource(R.string.v2_guest), style = MaterialTheme.typography.headlineMedium)
+        Text(stringResource(R.string.v2_guest_note))
+        androidx.compose.material3.Button(onClick = onSignIn) { Text(stringResource(R.string.v2_sign_in)) }
+        androidx.compose.material3.TextButton(onClick = onSettings) { Text(stringResource(R.string.settings_title)) }
     }
 }

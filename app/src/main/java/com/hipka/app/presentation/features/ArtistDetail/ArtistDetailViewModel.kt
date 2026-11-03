@@ -25,14 +25,17 @@ class ArtistDetailViewModel @Inject constructor(
 
     fun onIntent(intent: ArtistDetailIntent) {
         when (intent) {
-            is ArtistDetailIntent.LoadArtistData -> loadArtistSongs(intent.artistName, intent.imageUrl)
+            is ArtistDetailIntent.LoadArtistData -> loadArtistSongs(intent.artistName, intent.imageUrl, intent.artistId)
         }
     }
 
-    private fun loadArtistSongs(artistName: String, imageUrl: String) {
+    private fun loadArtistSongs(artistName: String, imageUrl: String, artistId: String) {
         _uiState.update { it.copy(artistName = artistName, imageUrl = imageUrl, isLoading = true) }
         viewModelScope.launch {
-            val songs = songRepository.getSongsByArtist(artistName)
+            val songs = try { songRepository.getSongsByArtist(if (artistId.isBlank()) artistName else "audius-artist:$artistId") } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _uiState.update { it.copy(isLoading = false, errorMessage = "Unable to load artist. Please try again.") }; return@launch
+            }
             _uiState.update {
                 it.copy(
                     songs = songs,

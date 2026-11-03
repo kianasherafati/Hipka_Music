@@ -11,6 +11,10 @@ interface AudiusApi {
     suspend fun trending(@Query("limit") limit: Int = 100): AudiusTracks
     @GET("tracks/search")
     suspend fun search(@Query("query") query: String, @Query("limit") limit: Int = 100): AudiusTracks
+    @GET("users/search")
+    suspend fun searchUsers(@Query("query") query: String, @Query("limit") limit: Int = 50): AudiusUsers
+    @GET("users/{id}/tracks")
+    suspend fun artistTracks(@Path("id") id: String, @Query("limit") limit: Int = 100, @Query("offset") offset: Int = 0): AudiusTracks
     @GET("tracks/{id}")
     suspend fun track(@Path("id") id: String): AudiusTrackResponse
 }
@@ -22,7 +26,10 @@ data class AudiusTrackResponse(val data: AudiusTrack? = null)
 data class AudiusTracks(val data: List<AudiusTrack> = emptyList())
 
 @Serializable
-data class AudiusUser(val name: String = "Unknown artist")
+data class AudiusUser(val name: String = "Unknown artist", val id: String = "",
+    @SerialName("profile_picture") val picture: AudiusArtwork? = null)
+@Serializable
+data class AudiusUsers(val data: List<AudiusUser> = emptyList())
 
 @Serializable
 data class AudiusArtwork(@SerialName("480x480") val medium: String? = null)
@@ -32,6 +39,8 @@ data class AudiusTrack(
     val id: String,
     val title: String,
     val user: AudiusUser,
+    val genre: String? = null,
+    val tags: String? = null,
     val artwork: AudiusArtwork? = null,
     @SerialName("play_count") val plays: Int = 0,
     @SerialName("favorite_count") val favorites: Long = 0,
@@ -47,7 +56,8 @@ data class AudiusTrack(
             id = "audius:$id", title = title, artistName = user.name,
             coverImageUrl = artwork?.medium.orEmpty(),
             audioUrl = "https://api.audius.co/v1/tracks/$id/stream?app_name=HipkaMusic",
-            playCount = plays, likesCount = favorites, releaseDate = released.orEmpty()
+            playCount = plays, likesCount = favorites, releaseDate = released.orEmpty(),
+            artistId = user.id, genre = genre.orEmpty(), tags = tags.orEmpty(), downloadable = downloadable && !downloadGated
         )
     }
 }

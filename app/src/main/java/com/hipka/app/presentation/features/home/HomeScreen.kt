@@ -34,6 +34,7 @@ import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.FavoriteBorder
@@ -85,11 +86,20 @@ fun HomeScreen(
     onLikeClick: (Song) -> Unit,
     onPlaylistClick: (String) -> Unit,
     onNavigateToSettings: () -> Unit, // ✨ اضافه شدن اتصال به تنظیمات
+    onNavigateToProfile: () -> Unit = {},
+    onVibes: () -> Unit = {},
     onGoToDownloads: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     LaunchedEffect(Unit) { onRefresh() }
 
+    Column(modifier.fillMaxSize()) {
+    HomeTopBar(currentUser = uiState.currentUser, onNavigateToSettings = onNavigateToSettings, onNavigateToProfile = onNavigateToProfile)
+    Row {
+        androidx.compose.material3.TextButton(onClick = onVibes) { Text("Hipka Vibes") }
+        androidx.compose.material3.TextButton(onClick = { onQuickActionClick("artists") }) { Text(stringResource(R.string.home_quick_artists)) }
+    }
+    Box(Modifier.weight(1f)) {
     when {
         uiState.isLoading -> {
             Box(modifier = modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -124,7 +134,7 @@ fun HomeScreen(
                 contentPadding = PaddingValues(bottom = HipkaTheme.dimens.spaceXL)
             ) {
                 // 1. Top App Bar همراه با لوگوی سفارشی و اکشن تنظیمات
-                item { HomeTopBar(currentUser = uiState.currentUser, onNavigateToSettings = onNavigateToSettings) }
+
                 // نوار اطلاع‌رسانی: محتوای زیر از کش آفلاین می‌آید
                 if (uiState.isShowingCachedData) {
                     item { OfflineBanner() }
@@ -279,12 +289,15 @@ fun HomeScreen(
             }
         }
     }
+    }
+    }
 }
 // کامپوننت TopBar به‌روزرسانی‌شده
 @Composable
 private fun HomeTopBar(
     currentUser: com.hipka.app.domain.model.User?,
-    onNavigateToSettings: () -> Unit
+    onNavigateToSettings: () -> Unit,
+    onNavigateToProfile: () -> Unit
 ) {
     val isPersian = LocalConfiguration.current.locales[0].language == "fa"
     val logoResId = if (isPersian) R.drawable.ic_logo_fa else R.drawable.ic_logo_en
@@ -315,7 +328,7 @@ private fun HomeTopBar(
             Spacer(modifier = Modifier.width(HipkaTheme.dimens.spaceS))
 
             // 👈 جایگزین دایره شرابی قبلی با آواتار واقعی کاربر
-            UserTopBarAvatar(user = currentUser)
+            IconButton(onClick = onNavigateToProfile) { UserTopBarAvatar(user = currentUser) }
         }
     }
 }
@@ -323,7 +336,7 @@ private fun HomeTopBar(
 // کامپوننت کمکی رندر عکس پروفایل در هدر هوم
 @Composable
 private fun UserTopBarAvatar(user: com.hipka.app.domain.model.User?, size: Dp = 38.dp) {
-    val avatarUrl = user?.avatarUrl?.trim()?.lowercase()
+    val avatarUrl = user?.avatarUrl?.trim()
 
     if (!avatarUrl.isNullOrBlank() && avatarUrl.startsWith("http")) {
         AsyncImage(
@@ -335,20 +348,8 @@ private fun UserTopBarAvatar(user: com.hipka.app.domain.model.User?, size: Dp = 
                 .clip(CircleShape)
         )
     } else {
-        val drawableRes = when (avatarUrl) {
-            "avatar_female" -> R.drawable.avatar_female
-            "avatar_male" -> R.drawable.avatar_male
-            else -> R.drawable.avatar_female // در صورت نامشخص بودن، آواتار پیش‌فرض
-        }
-
-        Image(
-            painter = painterResource(id = drawableRes),
-            contentDescription = user?.name,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(size)
-                .clip(CircleShape)
-        )
+        Icon(imageVector = androidx.compose.material.icons.Icons.Default.Person,
+            contentDescription = stringResource(R.string.nav_profile), modifier = Modifier.size(size))
     }
 }
 @Composable
@@ -686,6 +687,7 @@ private fun SquareSongCard(
                     )
                 }
 
+                com.hipka.app.presentation.common.TrackMenu(song)
                 IconButton(onClick = { onLikeClick(song) }, modifier = Modifier.size(22.dp)) {
                     Icon(
                         imageVector = if (song.isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,

@@ -59,6 +59,7 @@ fun SearchScreen(
     onSongClick: (List<Song>, Song) -> Unit,
     onLikeClick: (Song) -> Unit,
     onNavigateToDiscoverUsers: () -> Unit, // ویژگی کیانا: پارامتر جدید ناوبری برای اتصال به هاب اکتشاف کاربران
+    onArtist: (com.hipka.app.domain.model.Artist) -> Unit = {},
     viewModel: SearchViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -94,6 +95,9 @@ fun SearchScreen(
             )
         )
 
+        FilterChip(selected = uiState.selectedFilter == SearchFilter.DOWNLOADABLE,
+            onClick = { viewModel.onIntent(SearchIntent.ChangeFilter(if (uiState.selectedFilter == SearchFilter.DOWNLOADABLE) SearchFilter.ALL else SearchFilter.DOWNLOADABLE)) },
+            label = { Text(stringResource(R.string.v2_downloadable)) })
         Spacer(modifier = Modifier.height(HipkaTheme.dimens.spaceS))
 
         // ردیف فیلتر چیپ‌ها
@@ -119,7 +123,7 @@ fun SearchScreen(
         }
 
         // ویژگی کیانا: دکمه شیک پیدا کردن دوستان فقط زمانی که باکس سرچ خالی است نمایش داده می‌شود
-        if (uiState.searchQuery.isEmpty() && com.hipka.app.BuildConfig.LEGACY_DEMO_AUTH) {
+        if (uiState.searchQuery.isEmpty()) {
             Spacer(modifier = Modifier.height(HipkaTheme.dimens.spaceS))
             OutlinedButton(
                 onClick = onNavigateToDiscoverUsers,
@@ -153,6 +157,17 @@ fun SearchScreen(
                 }
             }
 
+            uiState.selectedFilter == SearchFilter.ARTIST && uiState.searchQuery.isNotBlank() -> {
+                LazyColumn {
+                    if (uiState.artists.isEmpty()) item { Text(stringResource(if (uiState.artistsError) R.string.search_failed else R.string.empty_state_no_results)) }
+                    items(uiState.artists, key = { it.id }) { artist ->
+                        TextButton(onClick = { onArtist(artist) }) {
+                            CoverImage(model = artist.imageUrl, contentDescription = null, modifier = Modifier.size(48.dp))
+                            Text(artist.name, modifier = Modifier.padding(12.dp))
+                        }
+                    }
+                }
+            }
             uiState.searchQuery.isEmpty() && uiState.searchHistory.isNotEmpty() -> {
                 Text(
                     text = stringResource(id = R.string.search_recent_searches),
@@ -304,6 +319,7 @@ private fun SearchResultItem(
             )
         }
 
+        com.hipka.app.presentation.common.TrackMenu(song)
         IconButton(
             onClick = onLikeClick,
             modifier = Modifier.size(24.dp)

@@ -18,7 +18,7 @@ if (localPropertiesFile.exists()) {
 }
 
 fun config(name: String, env: String, fallback: String = "") =
-    providers.environmentVariable(env).orNull ?: localProperties.getProperty(name, fallback)
+    providers.environmentVariable(env).orNull?.takeIf { it.isNotBlank() } ?: localProperties.getProperty(name, fallback)
 fun quoted(value: String) = "\"" + value.trim().removeSurrounding("\"")
     .replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "").replace("\r", "") + "\""
 val supabaseUrl = config("supabase.url", "SUPABASE_URL", "https://example.supabase.co/")
@@ -31,7 +31,7 @@ val keyPayload = supabaseKey.split('.').getOrNull(1)?.let {
 require(!keyPayload.contains("service_role")) { "Never embed a service-role JWT" }
 val finalUrl = quoted(supabaseUrl.trimEnd('/') + "/")
 val finalKey = quoted(supabaseKey)
-val legacyDemoAuth = config("hipka.legacyDemoAuth", "HIPKA_LEGACY_DEMO_AUTH", "false").toBoolean()
+val legacyDemoAuth = false
 
 android {
     namespace = "com.hipka.app"
@@ -41,8 +41,8 @@ android {
         applicationId = "com.hipka.app"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1.0"
+        versionCode = 3
+        versionName = "2.0.0-preview"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -144,6 +144,7 @@ dependencies {
     implementation("com.jakewharton.retrofit:retrofit2-kotlinx-serialization-converter:1.0.0")
 
     // ۹. کلاینت سوپابیس و شبکه Ktor
+    implementation("io.github.jan-tennert.supabase:gotrue-kt:2.5.2")
     implementation("io.github.jan-tennert.supabase:postgrest-kt:2.5.2")
     implementation("io.github.jan-tennert.supabase:realtime-kt:2.5.2")
     implementation("io.ktor:ktor-client-okhttp:2.3.13")

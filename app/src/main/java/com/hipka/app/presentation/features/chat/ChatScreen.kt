@@ -59,6 +59,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.repeatOnLifecycle
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.hipka.app.presentation.common.CoverImage
 import com.hipka.app.R
@@ -75,9 +76,17 @@ fun ChatScreen(
     viewModel: ChatViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val peerOnline by viewModel.peerOnline.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
-    LaunchedEffect(uiState.messages.size) {
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    LaunchedEffect(lifecycleOwner) {
+        lifecycleOwner.lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.STARTED) {
+            viewModel.setVisible(true)
+            try { kotlinx.coroutines.awaitCancellation() } finally { viewModel.setVisible(false) }
+        }
+    }
+    LaunchedEffect(uiState.messages.lastOrNull()?.id) {
         if (uiState.messages.isNotEmpty()) {
             listState.animateScrollToItem(0)
         }
@@ -94,6 +103,7 @@ fun ChatScreen(
                             style = MaterialTheme.typography.titleMedium
                         )
                         // ✨ نمایش انیمیشن‌دار و روان وضعیت typing...
+                        Text(if (peerOnline) androidx.compose.ui.res.stringResource(com.hipka.app.R.string.presence_here) else androidx.compose.ui.res.stringResource(com.hipka.app.R.string.presence_offline), style = MaterialTheme.typography.labelSmall)
                         AnimatedVisibility(
                             visible = uiState.isPeerTyping,
                             enter = fadeIn(),
@@ -149,6 +159,7 @@ fun ChatScreen(
                 else -> ChatMessages(
                     uiState = uiState,
                     listState = listState,
+                    onLoadOlder = viewModel::loadOlder,
                     onSongClick = { songId ->
                         uiState.sharedSongs[songId]?.let(onPlaySong)
                     },
@@ -172,6 +183,7 @@ private fun ChatMessages(
     uiState: ChatUiState,
     listState: LazyListState,
     onSongClick: (String) -> Unit,
+    onLoadOlder: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     LazyColumn(
@@ -188,6 +200,12 @@ private fun ChatMessages(
                 sharedSong = message.sharedSongId?.let { uiState.sharedSongs[it] },
                 onSongClick = { message.sharedSongId?.let(onSongClick) }
             )
+        }
+        item(key = "older-messages") {
+            if (uiState.hasMoreHistory && uiState.messages.isNotEmpty()) androidx.compose.material3.TextButton(enabled = !uiState.loadingOlder, onClick = onLoadOlder) {
+                Text(stringResource(com.hipka.app.R.string.load_older_messages))
+            }
+            uiState.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
     }
 }

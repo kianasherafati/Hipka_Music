@@ -14,6 +14,8 @@ data class ChatUiState(
     val isPeerTyping: Boolean = false,
     val draftText: String = "",
     val isLoading: Boolean = true,
+    val loadingOlder: Boolean = false,
+    val hasMoreHistory: Boolean = true,
     val isSending: Boolean = false,
     val isSongPickerOpen: Boolean = false,
     val errorMessage: String? = null

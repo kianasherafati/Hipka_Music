@@ -5,6 +5,10 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class SongDto(
+    val artistId: String = "",
+    val genre: String = "",
+    val tags: String = "",
+    val downloadable: Boolean = false,
     @SerialName("id") val id: String,
     @SerialName("title") val title: String,
     @SerialName("artist_name") val artistName: String,

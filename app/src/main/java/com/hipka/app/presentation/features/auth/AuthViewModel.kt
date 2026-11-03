@@ -145,7 +145,12 @@ class AuthViewModel @Inject constructor(
                 onFailure = { error ->
                     val isNetworkError = error is IOException
                     val userFriendlyError = when (error.message) {
-                        "AUTH_DEMO_DISABLED" -> if (isPersian) "ورود آزمایشی غیرفعال است؛ راهنمای پیکربندی پروژه را ببینید" else "Legacy demo sign-in is disabled. See the project setup guide."
+                        "AUTH_VERIFY_EMAIL" -> "Check your email to verify your account, then sign in."
+                        "AUTH_USERNAME_INVALID" -> "Use 3-30 letters, numbers or underscores for your username."
+                        "AUTH_PASSWORD_SHORT" -> "Use at least 8 characters for your password."
+                        "AUTH_EMAIL_REQUIRED" -> "Sign in with your email address."
+
+                        "AUTH_NOT_CONFIGURED" -> if (isPersian) "ورود آزمایشی غیرفعال است؛ راهنمای پیکربندی پروژه را ببینید" else "Account services are not configured in this build. Listening works without an account."
                         "AUTH_INVALID_CREDENTIALS" -> if (isPersian) "نام کاربری/ایمیل یا رمز عبور اشتباه است" else "Invalid username/email or password"
                         else -> if (isPersian) "خطا در برقراری ارتباط. لطفاً دوباره تلاش کنید" else "Authentication failed. Please try again."
                     }

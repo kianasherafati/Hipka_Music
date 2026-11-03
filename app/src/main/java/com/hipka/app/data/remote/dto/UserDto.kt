@@ -6,11 +6,11 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class UserDto(
+    val bio: String = "",
     @SerialName("id") val id: String,
     @SerialName("name") val name: String,
     @SerialName("username") val username: String? = null,
     @SerialName("email") val email: String? = null,
-    @SerialName("password") val password: String? = null,
     @SerialName("avatar_url") val avatarUrl: String? = null,
     @SerialName("is_premium") val isPremium: Boolean = false,
     @SerialName("created_at") val createdAt: String? = null

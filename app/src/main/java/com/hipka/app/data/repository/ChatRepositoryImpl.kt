@@ -12,6 +12,7 @@ import com.hipka.app.domain.repository.ChatRepository
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
+import io.github.jan.supabase.realtime.presenceChangeFlow
 import io.github.jan.supabase.realtime.broadcast
 import io.github.jan.supabase.realtime.broadcastFlow
 import io.github.jan.supabase.realtime.channel
@@ -25,8 +26,12 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
@@ -101,13 +106,23 @@ class ChatRepositoryImpl @Inject constructor(
             }
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
+            if (localBeforeSync.isEmpty()) throw e
             Log.e("ChatRepo", "Offline mode active, returning local database data.")
         }
 
         // ✨ همیشه پیام‌ها را از دیتابیس لوکال می‌خوانیم تا هیچ پیام آفلاینی غیب نشود
         return messageDao.getConversationOnce(myUserId, peerUserId)
             .map { it.toDomain() }
-            .sortedBy { it.timestamp }
+            .sortedWith(compareBy<Message> { it.timestamp }.thenBy { it.id })
+            .takeLast(50)
+    }
+
+    override suspend fun loadOlderMessages(myUserId: String, peerUserId: String, before: Message): List<Message> {
+        val cursor = "or(timestamp.lt.${before.timestamp},and(timestamp.eq.${before.timestamp},id.lt.${before.id}))"
+        val query = "(and(sender_id.eq.$myUserId,receiver_id.eq.$peerUserId,$cursor),and(sender_id.eq.$peerUserId,receiver_id.eq.$myUserId,$cursor))"
+        val messages = messageApi.getConversation(orQuery = query)
+        messageDao.insertMessages(messages.map { it.toEntity() })
+        return messages.map { it.toDomain() }
     }
 
     override suspend fun sendMessage(
@@ -128,10 +143,11 @@ class ChatRepositoryImpl @Inject constructor(
         // ۲. تلاش می‌کنیم نسخه SENT را به سرور بفرستیم
         val serverDto = localDto.copy(status = MessageStatus.SENT.name)
         try {
-            messageApi.sendMessage(serverDto)
+            val delivered = messageApi.sendMessage(serverDto).firstOrNull() ?: serverDto
+            messageDao.insertMessage(delivered.toEntity())
             // ۳. اگر موفق بود، لوکال را یک تیک (SENT) می‌کنیم
             messageDao.updateStatus(id, MessageStatus.SENT.name)
-            return serverDto.toDomain()
+            return delivered.toDomain()
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
             // ✨ ۴. اگر نت قطع بود، ارور می‌دهد، پیام در دیتابیس همان SENDING می‌ماند
@@ -143,7 +159,7 @@ class ChatRepositoryImpl @Inject constructor(
     override fun observeIncomingMessages(myUserId: String): Flow<Message> = callbackFlow {
         val channel = supabaseClient.channel("messages-inbox-$myUserId")
         val changes = channel.postgresChangeFlow<PostgresAction.Insert>(schema = "public") {
-            table = "messages"
+            table = "hipka_messages"
             filter = "receiver_id=eq.$myUserId"
         }
         val collectJob = launch {
@@ -165,7 +181,7 @@ class ChatRepositoryImpl @Inject constructor(
     override fun observeSentMessageStatusUpdates(myUserId: String): Flow<Message> = callbackFlow {
         val channel = supabaseClient.channel("messages-sent-status-$myUserId")
         val changes = channel.postgresChangeFlow<PostgresAction.Update>(schema = "public") {
-            table = "messages"
+            table = "hipka_messages"
             filter = "sender_id=eq.$myUserId"
         }
         val localJob = launch {
@@ -209,6 +225,28 @@ class ChatRepositoryImpl @Inject constructor(
             .forEach { entity -> localStatusUpdatesFlow.emit(entity.toDomain()) }
     }
 
+    override fun observePresence(myUserId: String, peerUserId: String): Flow<Boolean> = callbackFlow {
+        val name = "hipka-presence:" + listOf(myUserId, peerUserId).sorted().joinToString(":")
+        val channel = supabaseClient.channel(name) { isPrivate = true; presence { key = myUserId } }
+        val presenceJob = launch {
+            channel.presenceChangeFlow().collect { event ->
+                if (peerUserId in event.joins) trySend(true)
+                if (peerUserId in event.leaves) trySend(false)
+            }
+        }
+        val statusJob = launch {
+            channel.status.collect { status ->
+                if (status == RealtimeChannel.Status.SUBSCRIBED) channel.track(buildJsonObject { put("active", true) })
+                else trySend(false)
+            }
+        }
+        channel.subscribe()
+        awaitClose {
+            presenceJob.cancel(); statusJob.cancel()
+            CoroutineScope(Dispatchers.IO).launch { com.hipka.app.core.util.coroutineResult { channel.unsubscribe() } }
+        }
+    }
+
     override fun observeTypingStatus(myUserId: String, peerUserId: String): Flow<Boolean> = callbackFlow {
         val chName = typingChannelName(myUserId, peerUserId)
         val channel = getOrCreateTypingChannel(chName)
@@ -216,9 +254,17 @@ class ChatRepositoryImpl @Inject constructor(
             channel.broadcastFlow<TypingPayload>(event = TYPING_EVENT)
                 .filter { it.senderId == peerUserId }
                 .map { it.isTyping }
-                .collect { isTyping -> trySend(isTyping) }
+                .collectLatest { isTyping ->
+                    trySend(isTyping)
+                    if (isTyping) { delay(4000); trySend(false) }
+                }
         }
-        awaitClose { collectJob.cancel() }
+        awaitClose {
+            collectJob.cancel()
+            activeTypingChannel = null
+            activeTypingChannelName = null
+            CoroutineScope(Dispatchers.IO).launch { com.hipka.app.core.util.coroutineResult { channel.unsubscribe() } }
+        }
     }
 
     override suspend fun sendTypingStatus(myUserId: String, peerUserId: String, isTyping: Boolean) {
@@ -235,14 +281,15 @@ class ChatRepositoryImpl @Inject constructor(
         if (activeTypingChannelName == chName && activeTypingChannel != null) {
             return activeTypingChannel!!
         }
-        val channel = supabaseClient.channel(chName)
+        activeTypingChannel?.unsubscribe()
+        val channel = supabaseClient.channel(chName) { isPrivate = true }
         channel.subscribe()
         activeTypingChannel = channel
         activeTypingChannelName = chName
         return channel
     }
 
-    private fun typingChannelName(userIdA: String, userIdB: String): String = "typing-" + listOf(userIdA, userIdB).sorted().joinToString("-")
+    private fun typingChannelName(userIdA: String, userIdB: String): String = "hipka:" + listOf(userIdA, userIdB).sorted().joinToString(":")
 
     private fun MessageDto.toEntity() = OfflineMessageEntity(id = id, senderId = senderId, receiverId = receiverId, text = text, timestamp = timestamp, status = status, sharedSongId = sharedSongId)
     private fun OfflineMessageEntity.toDomain() = Message(id = id, senderId = senderId, receiverId = receiverId, text = text, status = MessageStatus.fromRaw(status), sharedSongId = sharedSongId, timestamp = timestamp)

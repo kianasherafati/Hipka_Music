@@ -14,71 +14,50 @@ import retrofit2.http.Query
 
 interface UserApi {
 
-    @GET("rest/v1/users?select=id,name,username,avatar_url,is_premium,created_at")
+    @GET("rest/v1/hipka_profiles?select=id,name,username,avatar_url,is_premium,created_at")
     suspend fun getAllUsers(): List<UserDto>
 
-    @GET("rest/v1/users")
+    @GET("rest/v1/hipka_profiles")
     suspend fun getUserById(
         @Query("id") idFilter: String, // pass as "eq.<id>"
         @Query("select") select: String = "id,name,username,avatar_url,is_premium,created_at"
     ): List<UserDto>
 
-    @GET("rest/v1/users")
+    @GET("rest/v1/hipka_profiles")
     suspend fun searchUsersByName(
         @Query("name") nameFilter: String, // pass as "ilike.*<query>*"
         @Query("select") select: String = "id,name,username,avatar_url,is_premium,created_at"
     ): List<UserDto>
 
-    @GET("rest/v1/users")
+    @GET("rest/v1/hipka_profiles")
     suspend fun getUsersByIds(
         @Query("id") idInFilter: String, // pass as "in.(id1,id2,...)"
         @Query("select") select: String = "id,name,username,avatar_url,is_premium,created_at"
     ): List<UserDto>
 
     // متدهای قبلی لاگین برای حفظ سازگاری با کد بقیه اعضای تیم
-    @GET("rest/v1/users")
-    suspend fun loginUser(
-        @Query("email") emailFilter: String,
-        @Query("password") passwordFilter: String,
-        @Query("select") select: String = "id,name,username,avatar_url,is_premium,created_at"
-    ): List<UserDto>
-
-    // متد جدید اختصاصی جهت ورود با ایمیل یا نام کاربری
-    @GET("rest/v1/users")
-    suspend fun loginUserOr(
-        @Query("or") orFilter: String, // pass as "(email.eq.xyz,name.eq.xyz)"
-        @Query("password") passwordFilter: String,
-        @Query("select") select: String = "id,name,username,avatar_url,is_premium,created_at"
-    ): List<UserDto>
-
-    @Headers("Prefer: return=representation")
-    @POST("rest/v1/users")
-    suspend fun registerUser(
-        @Body user: UserDto
-    ): List<UserDto>
-
-    @GET("rest/v1/user_follows")
+    @GET("rest/v1/hipka_follows")
     suspend fun getFollowings(
         @Query("follower_id") followerFilter: String, // pass as "eq.<userId>"
-        @Query("select") select: String = "id,name,username,avatar_url,is_premium,created_at"
+        @Query("select") select: String = "follower_id,following_id"
     ): List<UserFollowDto>
 
-    @GET("rest/v1/user_follows")
+    @GET("rest/v1/hipka_follows")
     suspend fun getFollowers(
         @Query("following_id") followingFilter: String, // pass as "eq.<userId>"
-        @Query("select") select: String = "id,name,username,avatar_url,is_premium,created_at"
+        @Query("select") select: String = "follower_id,following_id"
     ): List<UserFollowDto>
 
-    @POST("rest/v1/user_follows")
+    @POST("rest/v1/hipka_follows")
     suspend fun followUser(@Body relationship: UserFollowDto)
 
-    @DELETE("rest/v1/user_follows")
+    @DELETE("rest/v1/hipka_follows")
     suspend fun unfollowUser(
         @Query("follower_id") followerFilter: String, // "eq.<myId>"
         @Query("following_id") followingFilter: String // "eq.<targetId>"
     )
 
-    @PATCH("rest/v1/users")
+    @PATCH("rest/v1/hipka_profiles")
     suspend fun updatePremiumStatus(
         @Query("id") idFilter: String, // pass as "eq.<id>"
         @Body body: PremiumUpdateDto

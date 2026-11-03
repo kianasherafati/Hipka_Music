@@ -17,3 +17,5 @@
 /app/release/
 /audius-sample.json
 .DS_Store
+
+.local-checkpoints/

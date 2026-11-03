@@ -69,6 +69,7 @@ class SongRepositoryImpl @Inject constructor(
             val songs = remoteSongs.map { dto ->
                 Song(
                     id = dto.id,
+                    artistId = dto.artistId, genre = dto.genre, tags = dto.tags, downloadable = dto.downloadable,
                     title = dto.title,
                     artistName = dto.artistName,
                     coverImageUrl = dto.coverImageUrl,
@@ -83,7 +84,7 @@ class SongRepositoryImpl @Inject constructor(
             songDao.cacheSongs(songs.map { it.toEntity() })
             val localById = songDao.getAllCachedSongs().first().associateBy { it.id }
             emit(SongsResult(songs.map { song ->
-                localById[song.id]?.toDomainModel() ?: song
+                localById[song.id]?.let { song.copy(isDownloaded = it.isDownloaded, localFilePath = it.localFilePath) } ?: song
             }, DataSourceState.FRESH))
         } catch (e: Exception) {
             if (e is kotlinx.coroutines.CancellationException) throw e
@@ -105,7 +106,7 @@ class SongRepositoryImpl @Inject constructor(
         if (!id.startsWith("audius:")) return null
         val dto = audiusApi.track(id.removePrefix("audius:")).data?.toSongDto() ?: return null
         val song = Song(dto.id, dto.title, dto.artistName, dto.coverImageUrl, dto.audioUrl,
-            likesCount = dto.likesCount ?: 0, playCount = dto.playCount ?: 0, releaseDate = dto.releaseDate.orEmpty())
+            likesCount = dto.likesCount ?: 0, playCount = dto.playCount ?: 0, releaseDate = dto.releaseDate.orEmpty(), artistId = dto.artistId, genre = dto.genre, tags = dto.tags, downloadable = dto.downloadable)
         songDao.cacheSongs(listOf(song.toEntity()))
         return song
     }
@@ -117,6 +118,7 @@ class SongRepositoryImpl @Inject constructor(
             remoteSongs.map { dto ->
                 Song(
                     id = dto.id,
+                    artistId = dto.artistId, genre = dto.genre, tags = dto.tags, downloadable = dto.downloadable,
                     title = dto.title,
                     artistName = dto.artistName,
                     coverImageUrl = dto.coverImageUrl,
@@ -332,47 +334,22 @@ class SongRepositoryImpl @Inject constructor(
         )
     }
 
-    override fun getTopArtists(): Flow<List<Artist>> = kotlinx.coroutines.flow.flow {
-        try {
-            val remoteArtists = audiusApi.trending().data.filter { it.streamable && !it.gated }
-                .groupBy { it.user.name }.map { (name, tracks) ->
-                    com.hipka.app.data.remote.dto.ArtistDto(artistName = name,
-                        totalPlayCount = tracks.sumOf { it.plays.toLong() }.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
-                        artistImageUrl = tracks.first().artwork?.medium)
-                }.sortedByDescending { it.totalPlayCount }
-            val artists = remoteArtists.map { dto ->
-                Artist(
-                    name = dto.artistName,
-                    totalPlayCount = dto.totalPlayCount,
-                    imageUrl = dto.artistImageUrl ?: ""
-                )
-            }
-            emit(artists)
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            android.util.Log.e("REPO_ERROR", "Failed to fetch top artists: ${e.message}")
-            emit(emptyList())
-        }
+    override fun getTopArtists(): Flow<List<Artist>> = flow {
+        emit(audiusApi.trending().data.filter { it.streamable && !it.gated && it.user.id.isNotBlank() }
+            .groupBy { it.user.id }.map { (id, tracks) ->
+                Artist(id = id, name = tracks.first().user.name,
+                    totalPlayCount = tracks.sumOf { it.plays.toLong() }.coerceAtMost(Int.MAX_VALUE.toLong()).toInt(),
+                    imageUrl = tracks.first().user.picture?.medium.orEmpty())
+            }.sortedByDescending { it.totalPlayCount })
     }
-
     override suspend fun getSongsByArtist(artistName: String): List<Song> {
-        return try {
-            val remoteSongs = audiusApi.search(artistName).data.filter { it.user.name.equals(artistName, ignoreCase = true) }.mapNotNull { it.toSongDto() }
-            remoteSongs.map { dto ->
-                Song(
-                    id = dto.id,
-                    title = dto.title,
-                    artistName = dto.artistName,
-                    coverImageUrl = dto.coverImageUrl,
-                    audioUrl = dto.audioUrl,
-                    playCount = dto.playCount ?: 0,
-                    likesCount = dto.likesCount ?: 0,
-                    releaseDate = dto.releaseDate ?: ""
-                )
-            }
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            emptyList()
+        // Artist ID is supplied by navigation; names are only used by old callers.
+        val id = if (artistName.startsWith("audius-artist:")) artistName.removePrefix("audius-artist:")
+            else audiusApi.searchUsers(artistName).data.firstOrNull { it.name.equals(artistName, true) }?.id ?: return emptyList()
+        return audiusApi.artistTracks(id).data.mapNotNull { it.toSongDto() }.map { dto ->
+            Song(id = dto.id, title = dto.title, artistName = dto.artistName, coverImageUrl = dto.coverImageUrl,
+                audioUrl = dto.audioUrl, playCount = dto.playCount ?: 0, likesCount = dto.likesCount ?: 0,
+                artistId = dto.artistId, genre = dto.genre, tags = dto.tags, downloadable = dto.downloadable)
         }
     }
 }

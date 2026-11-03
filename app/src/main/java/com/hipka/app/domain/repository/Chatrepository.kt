@@ -6,6 +6,8 @@ import kotlinx.coroutines.flow.Flow
 interface ChatRepository {
     suspend fun getConversationHistory(myUserId: String, peerUserId: String): List<Message>
 
+    suspend fun loadOlderMessages(myUserId: String, peerUserId: String, before: Message): List<Message>
+
     suspend fun sendMessage(
         id: String = java.util.UUID.randomUUID().toString(),
         myUserId: String,
@@ -25,6 +27,8 @@ interface ChatRepository {
 
     /** True while the other side of this conversation is actively typing. */
     fun observeTypingStatus(myUserId: String, peerUserId: String): Flow<Boolean>
+
+    fun observePresence(myUserId: String, peerUserId: String): Flow<Boolean>
 
     suspend fun sendTypingStatus(myUserId: String, peerUserId: String, isTyping: Boolean)
 }

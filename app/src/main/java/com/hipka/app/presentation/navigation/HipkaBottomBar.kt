@@ -102,8 +102,8 @@ fun HipkaBottomBar(navController: NavHostController) {
                 unselectedIcon = Icons.Outlined.Search
             ),
             BottomNavItem(
-                route = Screen.Downloads.route,
-                titleResId = R.string.nav_downloads,
+                route = Screen.Library.route,
+                titleResId = R.string.nav_library,
                 selectedIcon = Icons.Filled.FileDownload,
                 unselectedIcon = Icons.Outlined.FileDownload
             ),
@@ -114,8 +114,8 @@ fun HipkaBottomBar(navController: NavHostController) {
                 unselectedIcon = Icons.Outlined.LibraryMusic
             ),
             BottomNavItem(
-                route = Screen.Profile.route,
-                titleResId = R.string.nav_profile,
+                route = Screen.ChatList.route,
+                titleResId = R.string.nav_chats,
                 selectedIcon = Icons.Filled.Person,
                 unselectedIcon = Icons.Outlined.Person
             )

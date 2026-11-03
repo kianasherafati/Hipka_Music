@@ -37,6 +37,7 @@ import com.hipka.app.presentation.theme.HipkaTheme
 @Composable
 fun ArtistDetailScreen(
     artistName: String,
+    artistId: String = "",
     imageUrl: String,
     likedSongIds: Set<String>,
     onBackClick: () -> Unit,
@@ -48,7 +49,7 @@ fun ArtistDetailScreen(
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
     LaunchedEffect(artistName, imageUrl) {
-        viewModel.onIntent(ArtistDetailIntent.LoadArtistData(artistName, imageUrl))
+        viewModel.onIntent(ArtistDetailIntent.LoadArtistData(artistName, imageUrl, artistId))
     }
 
     Scaffold(
@@ -172,6 +173,7 @@ private fun ArtistSongRowItem(
             )
         }
 
+        com.hipka.app.presentation.common.TrackMenu(song)
         IconButton(onClick = onLikeClick) {
             Icon(
                 imageVector = if (song.isLiked) Icons.Filled.Favorite else Icons.Outlined.FavoriteBorder,

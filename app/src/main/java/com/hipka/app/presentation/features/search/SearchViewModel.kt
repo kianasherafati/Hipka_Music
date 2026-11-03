@@ -14,6 +14,7 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SearchViewModel @Inject constructor(
+    private val audius: com.hipka.app.data.remote.api.AudiusApi,
     private val songRepository: SongRepository,
     private val networkMonitor: NetworkMonitor
 ) : ViewModel() {
@@ -40,7 +41,12 @@ class SearchViewModel @Inject constructor(
                     val results = if (offline) songRepository.getSongs().first().filter {
                         it.title.contains(query, true) || it.artistName.contains(query, true)
                     } else songRepository.searchSongs(query)
-                    _uiState.update { it.copy(rawSearchResults = results,
+                    val artistResult = com.hipka.app.core.util.coroutineResult {
+                        if (offline) emptyList() else audius.searchUsers(query).data.map {
+                            com.hipka.app.domain.model.Artist(it.id, it.name, 0, it.picture?.medium.orEmpty())
+                        }
+                    }
+                    _uiState.update { it.copy(artists = artistResult.getOrDefault(emptyList()), artistsError = artistResult.isFailure, rawSearchResults = results,
                         searchResults = applyFilter(results, it.selectedFilter, query),
                         isLoading = false, isOffline = offline) }
                 } catch (cancelled: CancellationException) {
@@ -73,12 +79,13 @@ class SearchViewModel @Inject constructor(
     private fun search(query: String, immediate: Boolean) {
         _uiState.update { it.copy(searchQuery = query, errorMessage = null, isOffline = false,
             isLoading = query.isNotBlank(), hasSearchedBefore = query.isNotBlank(),
-            rawSearchResults = emptyList(), searchResults = emptyList()) }
+            artistsError = false, artists = emptyList(), rawSearchResults = emptyList(), searchResults = emptyList()) }
         requests.value = Request(query, immediate, requests.value.revision + 1)
     }
 
     private fun applyFilter(songs: List<Song>, filter: SearchFilter, query: String): List<Song> =
         when (filter) {
+            SearchFilter.DOWNLOADABLE -> songs.filter { it.downloadable }
             SearchFilter.ALL -> songs
             SearchFilter.SONG -> songs.filter { it.title.contains(query.trim(), true) }
             SearchFilter.ARTIST -> songs.filter { it.artistName.contains(query.trim(), true) }

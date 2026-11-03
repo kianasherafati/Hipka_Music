@@ -84,6 +84,7 @@ fun PlayerScreen(
     onDownloadClick: () -> Unit = {},
     isLiked: Boolean = false,
     onLikeClick: () -> Unit = {},
+    onAddToPlaylist: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -121,6 +122,8 @@ fun PlayerScreen(
                 )
             }
 
+            song?.let { com.hipka.app.presentation.common.TrackMenu(it) }
+            TextButton(onClick = onAddToPlaylist, enabled = song != null) { Text(stringResource(R.string.v2_add_to_playlist)) }
             SleepTimerButton(
                 remainingMs = uiState.sleepTimerRemainingMs,
                 onSetTimer = { durationMs -> onIntent(PlayerIntent.SetSleepTimer(durationMs)) },

@@ -9,16 +9,20 @@ import com.hipka.app.data.remote.dto.toDomain
 import com.hipka.app.domain.model.User
 import com.hipka.app.domain.repository.UserRepository
 import kotlinx.coroutines.flow.Flow
-import java.util.UUID
+import io.github.jan.supabase.gotrue.auth
+import io.github.jan.supabase.gotrue.providers.builtin.Email
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import javax.inject.Inject
 
 class UserRepositoryImpl @Inject constructor(
     private val userApi: UserApi,
+    private val supabase: io.github.jan.supabase.SupabaseClient,
     private val sessionManager: SessionManager
 ) : UserRepository {
 
     override suspend fun getUserById(id: String): User? =
-        if (com.hipka.app.BuildConfig.LEGACY_DEMO_AUTH) userApi.getUserById(idFilter = "eq.$id").firstOrNull()?.toDomain() else null
+        userApi.getUserById(idFilter = "eq.$id").firstOrNull()?.toDomain()
 
     override suspend fun getAllUsers(): List<User> =
         userApi.getAllUsers().map { it.toDomain() }
@@ -53,50 +57,28 @@ class UserRepositoryImpl @Inject constructor(
     }
 
     // ورود با ایمیل یا نام کاربری
-    override suspend fun login(emailOrUsername: String, password: String): Result<User> {
-        if (!com.hipka.app.BuildConfig.LEGACY_DEMO_AUTH) return Result.failure(IllegalStateException("AUTH_DEMO_DISABLED"))
-        return try {
-            val cleanIdentifier = emailOrUsername.trim()
-            val users = userApi.loginUserOr(
-                orFilter = "(email.eq.$cleanIdentifier,username.eq.$cleanIdentifier)",
-                passwordFilter = "eq.$password"
-            )
-            val userDto = users.firstOrNull()
-            if (userDto != null) {
-                val user = userDto.toDomain()
-                sessionManager.setCurrentUser(user.id)
-                Result.success(user)
-            } else {
-                Result.failure(Exception("AUTH_INVALID_CREDENTIALS"))
-            }
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Result.failure(e)
-        }
+    override suspend fun login(emailOrUsername: String, password: String): Result<User> = authResult {
+        require(emailOrUsername.contains("@")) { "AUTH_EMAIL_REQUIRED" }
+        supabase.auth.signInWith(Email) { email = emailOrUsername.trim(); this.password = password }
+        val id = supabase.auth.currentUserOrNull()?.id ?: error("AUTH_INVALID_CREDENTIALS")
+        getUserById(id) ?: User(id = id, name = emailOrUsername.substringBefore("@"), avatarUrl = null, isPremium = false, createdAt = "")
     }
-    override suspend fun register(name: String, username: String, email: String, password: String, gender: String): Result<User> {
-        if (!com.hipka.app.BuildConfig.LEGACY_DEMO_AUTH) return Result.failure(IllegalStateException("AUTH_DEMO_DISABLED"))
-        return try {
-            val newUserId = UUID.randomUUID().toString()
-            val defaultAvatarName = if (gender == "female") "avatar_female" else "avatar_male"
-            val newDto = UserDto(
-                id = newUserId,
-                name = name.trim(),
-                username = username.trim(),
-                email = email.trim(),
-                password = password,
-                avatarUrl = defaultAvatarName,
-                isPremium = false,
-                createdAt = null
-            )
-            val createdUsers = userApi.registerUser(newDto)
-            val user = createdUsers.firstOrNull()?.toDomain() ?: error("Registration returned no user")
-            sessionManager.setCurrentUser(user.id)
-            Result.success(user)
-        } catch (e: Exception) {
-            if (e is kotlinx.coroutines.CancellationException) throw e
-            Result.failure(e)
+    override suspend fun register(name: String, username: String, email: String, password: String, gender: String): Result<User> = authResult {
+        require(username.matches(Regex("[a-zA-Z0-9_]{3,30}"))) { "AUTH_USERNAME_INVALID" }
+        require(password.length >= 8) { "AUTH_PASSWORD_SHORT" }
+        supabase.auth.signUpWith(Email) {
+            this.email = email.trim(); this.password = password
+            data = buildJsonObject { put("name", name.trim()); put("username", username.lowercase(java.util.Locale.ROOT)) }
         }
+        val id = supabase.auth.currentUserOrNull()?.id ?: error("AUTH_VERIFY_EMAIL")
+        getUserById(id) ?: User(id = id, name = name, avatarUrl = null, isPremium = false, createdAt = "")
+    }
+    private suspend fun authResult(block: suspend () -> User): Result<User> = try {
+        check(!com.hipka.app.BuildConfig.SUPABASE_KEY.startsWith("unconfigured")) { "AUTH_NOT_CONFIGURED" }
+        Result.success(block())
+    } catch (e: Exception) {
+        if (e is kotlinx.coroutines.CancellationException) throw e
+        Result.failure(e)
     }
 
     override suspend fun logout() {

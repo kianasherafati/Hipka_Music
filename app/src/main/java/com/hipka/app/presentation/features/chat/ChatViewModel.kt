@@ -21,12 +21,15 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.util.UUID
 import javax.inject.Inject
 
+@OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
@@ -41,6 +44,33 @@ class ChatViewModel @Inject constructor(
     private val _uiState = MutableStateFlow(ChatUiState(peerUserId = peerUserId))
     val uiState: StateFlow<ChatUiState> = _uiState.asStateFlow()
 
+    val peerOnline = sessionManager.currentUserId.flatMapLatest { id ->
+        if (id == null) kotlinx.coroutines.flow.flowOf(false) else chatRepository.observePresence(id, peerUserId)
+    }.catch { emit(false) }.stateIn(viewModelScope, kotlinx.coroutines.flow.SharingStarted.WhileSubscribed(0), false)
+
+    @Volatile private var visible = false
+    fun setVisible(value: Boolean) {
+        visible = value
+        if (value && _uiState.value.currentUserId.isNotEmpty()) markPeerMessagesRead(_uiState.value.currentUserId)
+        if (!value) _uiState.update { it.copy(isPeerTyping = false) }
+    }
+    fun loadOlder() {
+        val state = _uiState.value
+        if (state.loadingOlder || !state.hasMoreHistory) return
+        val before = state.messages.filter { it.status != MessageStatus.SENDING }.minWithOrNull(compareBy<Message> { it.timestamp }.thenBy { it.id }) ?: return
+        _uiState.update { it.copy(loadingOlder = true) }
+        viewModelScope.launch {
+            try {
+                val older = chatRepository.loadOlderMessages(state.currentUserId, peerUserId, before)
+                _uiState.update { it.copy(messages = (it.messages + older).distinctBy { m -> m.id }.sortedWith(compareBy<Message> { m -> m.timestamp }.thenBy { m -> m.id }), loadingOlder = false, hasMoreHistory = older.size == 50) }
+                resolveSharedSongs(older.mapNotNull { it.sharedSongId })
+            } catch (e: Exception) {
+                if (e is kotlinx.coroutines.CancellationException) throw e
+                _uiState.update { it.copy(loadingOlder = false, errorMessage = "Could not load older messages. Please retry.") }
+            }
+        }
+    }
+
     private var stoppedTypingJob: Job? = null
     private var isTypingSignalSent = false
 
@@ -48,7 +78,7 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch(Dispatchers.IO) {
             val myId = sessionManager.currentUserId.first()
             if (myId == null) {
-                _uiState.update { it.copy(isLoading = false, errorMessage = "No demo user selected.") }
+                _uiState.update { it.copy(isLoading = false, errorMessage = "Sign in to send messages.") }
                 return@launch
             }
             _uiState.update { it.copy(currentUserId = myId) }
@@ -112,13 +142,18 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun startHybridSyncEngine(myId: String) {
-        viewModelScope.launch(Dispatchers.IO + SupervisorJob()) {
+        viewModelScope.launch(Dispatchers.IO) {
             while (true) {
-                delay(2500)
+                delay(5000)
+                if (!visible) continue
                 com.hipka.app.core.util.coroutineResult { chatRepository.getConversationHistory(myId, peerUserId) }
                     .onSuccess { freshHistory ->
                         if (freshHistory.isNotEmpty()) {
                             _uiState.update { state ->
+                                val confirmed = state.messages.filter { it.status != MessageStatus.SENDING }
+                                if (confirmed.isNotEmpty() && freshHistory.none { incoming -> confirmed.any { it.id == incoming.id } }) {
+                                    return@update state.copy(messages = (freshHistory + state.messages.filter { it.status == MessageStatus.SENDING }).distinctBy { it.id }.sortedBy { it.timestamp }, hasMoreHistory = true)
+                                }
                                 var hasChanges = false
                                 val currentMap = state.messages.associateBy { it.id }.toMutableMap()
 
@@ -152,7 +187,7 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun loadAvailableSongsToShare() {
-        viewModelScope.launch(Dispatchers.IO + SupervisorJob()) {
+        viewModelScope.launch(Dispatchers.IO) {
             songRepository.getSongs()
                 .catch { e -> Log.e("ChatViewModel", "Error in getSongs stream: ${e.message}") }
                 .collect { songs ->
@@ -163,13 +198,14 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun markPeerMessagesRead(myId: String) {
+        if (!visible) return
         viewModelScope.launch(Dispatchers.IO) {
             com.hipka.app.core.util.coroutineResult { chatRepository.markConversationAsRead(myId, peerUserId) }
         }
     }
 
     private fun listenForIncoming(myId: String) {
-        viewModelScope.launch(Dispatchers.IO + SupervisorJob()) {
+        viewModelScope.launch(Dispatchers.IO) {
             chatRepository.observeIncomingMessages(myId)
                 .catch { e -> Log.e("ChatViewModel", "Error in incoming messages flow: ${e.message}") }
                 .collect { incoming ->
@@ -188,7 +224,7 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun listenForStatusUpdates(myId: String) {
-        viewModelScope.launch(Dispatchers.IO + SupervisorJob()) {
+        viewModelScope.launch(Dispatchers.IO) {
             chatRepository.observeSentMessageStatusUpdates(myId)
                 .catch { e -> Log.e("ChatViewModel", "Error in status updates flow: ${e.message}") }
                 .collect { updated ->
@@ -208,7 +244,7 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun listenForTyping(myId: String) {
-        viewModelScope.launch(Dispatchers.IO + SupervisorJob()) {
+        viewModelScope.launch(Dispatchers.IO) {
             chatRepository.observeTypingStatus(myId, peerUserId)
                 .catch { e -> Log.e("ChatViewModel", "Error in typing status flow: ${e.message}") }
                 .collect { isTyping -> _uiState.update { it.copy(isPeerTyping = isTyping) } }

@@ -1,5 +1,6 @@
 package com.hipka.app.di
 
+import io.github.jan.supabase.gotrue.auth
 import android.content.Context
 import com.hipka.app.BuildConfig
 import com.hipka.app.data.local.dao.SongDao
@@ -52,7 +53,7 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
+    fun provideOkHttpClient(supabase: io.github.jan.supabase.SupabaseClient): OkHttpClient {
         return OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -62,7 +63,7 @@ object AppModule {
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
                     .addHeader("apikey", BuildConfig.SUPABASE_KEY)
-                    .addHeader("Authorization", "Bearer ${BuildConfig.SUPABASE_KEY}")
+                    .header("Authorization", chain.request().header("Authorization") ?: "Bearer ${supabase.auth.currentAccessTokenOrNull() ?: BuildConfig.SUPABASE_KEY}")
                     .build()
                 chain.proceed(request)
             }

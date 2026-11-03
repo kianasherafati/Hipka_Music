@@ -19,6 +19,7 @@ data class MainUiState(
     val languageCode: String = LocaleManager.LANGUAGE_ENGLISH,
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val isLoggedIn: Boolean = false,
+    val userId: String? = null,
     /** تا وقتی نشست ذخیره‌شده خوانده نشده، نباید تصمیم بگیریم کاربر لاگین است یا نه */
     val isSessionChecked: Boolean = false,
     val isLoading: Boolean = true
@@ -44,7 +45,7 @@ class MainViewModel @Inject constructor(
         viewModelScope.launch {
             sessionManager.currentUserId.collect { userId ->
                 _uiState.update {
-                    it.copy(isLoggedIn = !userId.isNullOrBlank(), isSessionChecked = true)
+                    it.copy(isLoggedIn = !userId.isNullOrBlank(), userId = userId, isSessionChecked = true)
                 }
             }
         }

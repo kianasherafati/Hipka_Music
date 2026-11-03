@@ -11,5 +11,5 @@ data class ArtistDetailUiState(
 )
 
 sealed interface ArtistDetailIntent {
-    data class LoadArtistData(val artistName: String, val imageUrl: String) : ArtistDetailIntent
+    data class LoadArtistData(val artistName: String, val imageUrl: String, val artistId: String = "") : ArtistDetailIntent
 }

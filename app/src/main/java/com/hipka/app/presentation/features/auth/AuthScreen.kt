@@ -42,6 +42,7 @@ import com.hipka.app.presentation.theme.HipkaTheme
 fun AuthScreen(
     onMainIntent: (MainIntent) -> Unit,
     onAuthSuccess: () -> Unit,
+    onResetPassword: () -> Unit = {},
     viewModel: AuthViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
@@ -93,6 +94,7 @@ fun AuthScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
+            TextButton(onClick = onResetPassword) { Text(androidx.compose.ui.res.stringResource(com.hipka.app.R.string.v2_text_54)) }
             Spacer(modifier = Modifier.height(16.dp))
 
             // لوگوی برنامه
