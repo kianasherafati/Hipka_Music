@@ -1,4 +1,63 @@
-# Verification record
+# Hipka 2.0 preview verification
+
+Date: 2026-11-03. This section supersedes the historical 1.1 feature status below.
+
+## Final source verification
+
+`assembleDebug`, `testDebugUnitTest`, `lintDebug`, and
+`assembleDebugAndroidTest` completed with **BUILD SUCCESSFUL** using the existing
+Gradle 8.11.1/JDK/SDK 35 setup in offline mode (`v2-publish-validation.log`).
+
+- Debug APK: `2.0.0-preview`, version code 3, minimum API 24.
+- JVM unit tests: **19 passed; 0 failures, 0 errors, 0 skipped**.
+- Lint: **0 errors, 46 warnings**. Warnings remain; no warning-free claim is made.
+- Android navigation and two Keystore tests: compiled into the test APK, not run.
+- Changed text files passed UTF-8 and resource XML checks; `git diff --check`
+  passed. No private-key, GitHub-token, Supabase-secret or literal JWT pattern was
+  found in changed files. No APKs, logs, local credentials or checkpoints are staged.
+
+The prior interrupted build and resumed build also succeeded, but the final check
+covers the late chat-pagination and Vibes-personalization changes. No application
+source was changed after that final check began. Logs and the original working-tree
+checkpoint remain locally preserved and ignored by Git.
+
+## Device and backend boundaries
+
+- The bounded headless Pixel_8 attempt booted and installed the debug APK. Android
+  then displayed a system process ANR. No successful app navigation or audible
+  playback is inferred from installation. Further emulator troubleshooting was
+  skipped at the user's request.
+- The prior connected-test task failed resolving an uncached Android UTP dependency
+  in offline mode. Instrumentation tests are compiled, not reported as executed.
+- No Supabase project was deployed. Auth/signup/login/session restoration, profiles,
+  avatar Storage, follows, public playlists, multi-user chat, read receipts,
+  typing/presence and synchronization remain integration-unverified. The pgTAP RLS
+  suite was not executed. JVM tests do not prove backend authorization.
+- Follow [Supabase setup](SUPABASE_SETUP.md), apply all five migrations to an isolated
+  stack, configure email Auth/SMTP and private Realtime, then execute the A/B/C
+  acceptance tests. Use only a public project key in the Android build.
+- Guest music requires no Supabase setup. Playback service, download worker and Room
+  schema were preserved. Regression unit tests passed; complete real-device
+  acceptance is still required before calling the preview production-ready.
+
+## Remaining real-device acceptance
+
+Run the compiled navigation and Keystore instrumentation tests on a stable device.
+Manually check all five tabs, profile/back navigation, artist details and Vibes;
+playlist editing, playback, shuffle and track actions; streaming, queue controls,
+background/lock-screen audio and headphone routing; downloads and offline playback
+using the checklist below. Check Persian/English, RTL, TalkBack labels, large fonts,
+light/dark themes and error/loading/empty states. Some status/error text remains
+English. Playback queue restoration after process death remains a known gap.
+
+CI builds, runs JVM tests and lint, compiles instrumentation tests and uploads
+`hipka-debug-apk`. It does not execute device or backend integration tests. Actual
+publication links are provided in the delivery report; old CI links below are
+historical evidence for 1.1 only.
+
+---
+
+# Historical 1.1 verification record
 
 Date: 2026-11-01. Final local verification completed successfully.
 

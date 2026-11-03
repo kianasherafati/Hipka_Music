@@ -22,14 +22,22 @@ Only public, streamable, ungated tracks are listed. Download requests recheck th
 - Material 3 light/dark themes, English/Persian localization, and RTL layouts.
 - A local library that works without signing in.
 
-Supabase social/profile/chat and editorial playlist code from the university project remains for legacy demonstration. It is **not a production authentication system** and is disabled by default. Favorites are local; they do not modify an Audius account. Offline catalog metadata does not guarantee that audio is downloaded.
+## 2.0 preview implementation
+
+- Five distinct tabs: Home, Search, Library, Playlists and Chats; Profile opens from the Home avatar.
+- Supabase Auth email registration/login, verification messaging, recovery-code password reset and encrypted persistent sessions. Legacy password queries are removed.
+- Profile editing (name, bio, photo-picker avatar upload or HTTPS URL), user search, follows, blocking, paginated conversations, shared songs, read status, private typing events and conversation presence.
+- Local playlist create/edit/delete, track add/remove/reorder, playback/shuffle and text sharing. Account playlists use revision-checked cloud synchronization with preserved conflict copies and public profile publication.
+- Stable Audius artist IDs and user-search endpoints, provider-metadata download filtering, track action menus and deterministic Hipka Vibes mixes. Editorial mixes are generated from real catalog tracks, with an explicit trending fallback.
+
+**This is a preview, not a completed production 2.0 release.** Account features require deployment of the supplied Supabase migrations and configuration. No live multi-user Auth, chat, RLS or sync test is claimed. Remaining acceptance work are in [implementation progress](docs/IMPLEMENTATION_PROGRESS.md).
 
 ## Build
 
 Requirements: JDK 17 or newer (tested setup uses Android Studio's bundled JDK), Android SDK Platform 35 and Build Tools, and network access for Gradle dependencies. Minimum device version: Android 7 / API 24.
 
 ```sh
-git clone https://github.com/Parand1khalili/Hipka_Music.git
+git clone https://github.com/kianasherafati/Hipka_Music.git
 cd Hipka_Music
 ./gradlew :app:assembleDebug :app:testDebugUnitTest :app:lintDebug
 ```
@@ -38,11 +46,11 @@ On Windows use `gradlew.bat`. Open the project in Android Studio to configure th
 
 Official Google/Maven repositories are the defaults. On restricted networks, `HIPKA_MAVEN_MIRROR` can specify an explicitly trusted HTTPS Maven mirror. Do not commit machine-specific repository or SDK paths.
 
-## Optional legacy Supabase demonstration
+## Supabase setup
 
-See [the configuration example](local.properties.example). Use an isolated test project and disposable credentials only. Set `hipka.legacyDemoAuth=true` to opt into the old **debug-only** sign-in implementation. Release builds always disable it. The original table schema and RPCs are not provisioned by this repository.
+Follow [Supabase setup and staging acceptance](docs/SUPABASE_SETUP.md). The version-controlled migrations create isolated social tables, RLS policies, private Realtime authorization and a revision-checked playlist RPC. No migration has been executed against a remote database. Never put service-role or secret keys in an APK.
 
-The old implementation compares passwords via PostgREST queries and treats a stored user ID as a session. It cannot be made production-safe solely by modifying this client. Production deployment requires migration to Supabase Auth, authenticated JWTs, reviewed Row Level Security, and server-controlled premium entitlements. No production database changes are performed by this project. Never put service-role or secret keys in an APK. See [security notes](docs/SECURITY.md).
+The default build works as a guest without Supabase configuration. For account features supply the public project URL/key through untracked local properties, environment variables, or the personal fork's Actions repository variables. Old local user IDs are ignored for authentication; existing Room music/download data is preserved.
 
 ## Architecture
 
@@ -54,12 +62,12 @@ Compose screens → ViewModels / StateFlow → repository interfaces
                                           └─ WorkManager → download worker / private files
 ```
 
-Hilt wires dependencies. Retrofit/OkHttp and Kotlin serialization handle HTTP; the Audius client is separate from the legacy Supabase client so backend credentials are never attached to music-provider requests. Settings and optional legacy session IDs use DataStore.
+Hilt wires dependencies. Retrofit/OkHttp and Kotlin serialization handle HTTP; the Audius client is separate from the authenticated Supabase client so backend credentials are never attached to music-provider requests. Settings and local playlists use DataStore; Auth sessions use encrypted Android Keystore-backed SDK storage.
 
 Source folders: `presentation` (screens/navigation/state), `domain` (models/contracts), `data` (repositories/API/Room/player/downloads), `di` (dependency wiring), and `service` (background playback).
 
 ## Validation and limitations
 
-See [verification notes](docs/VERIFICATION.md) for executed checks and remaining manual scenarios. Unit tests cover provider response parsing, gated-track filtering, stable stream URLs, malformed IDs, and coroutine cancellation. GitHub Actions builds, tests, and lints each push.
+See [verification notes](docs/VERIFICATION.md) for executed checks and remaining manual scenarios. Unit tests cover provider response parsing, gated-track filtering, stable stream URLs, malformed IDs, coroutine cancellation, playlist order/account isolation, cloud snapshot normalization, and deterministic Vibes personalization. Android navigation and encrypted-storage tests are compiled; their execution remains unverified. GitHub Actions builds, tests, and lints each push.
 
-There are no fabricated screenshots or test badges. Device screenshots should be added only after capturing a running, verified build. Existing legacy backend features, process-death playback restoration, provider quotas, and real-device audio routing need further validation. No license grant is inferred for third-party music or original team assets.
+There are no fabricated screenshots or test badges. Device screenshots should be added only after capturing a running, verified build. Backend integration, process-death playback restoration, provider quotas, and real-device audio routing need further validation. No license grant is inferred for third-party music or original team assets.
